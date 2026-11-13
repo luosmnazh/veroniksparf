@@ -1,0 +1,29 @@
+# Blueprint для Render: Dashboard → New → Blueprint → выбрать этот репозиторий.
+# Секреты (BOT_TOKEN и др.) Render спросит при создании — в файл их не пишем.
+services:
+  - type: web
+    name: veroniks
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: WEBAPP_URL
+        sync: false
+      - key: ALLOWED_USER_IDS
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        sync: false
+      - key: DATABASE_PATH
+        value: /data/veroniks.db
+# Постоянный диск доступен только на платных планах. На бесплатном база
+# пересоздаётся из встроенного набора при каждом перезапуске — для каталога
+# это нормально: избранное хранится в Telegram/браузере, а не в базе.
+# Если перейдёте на план Starter, раскомментируйте:
+#    disk:
+#      name: veroniks-data
+#      mountPath: /data
+#      sizeGB: 1

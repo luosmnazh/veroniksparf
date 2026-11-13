@@ -8,5 +8,4 @@ data/*.db-wal
 data/*.db-shm
 data/raw/*
 !data/raw/.gitkeep
-screenshots/
 .DS_Store

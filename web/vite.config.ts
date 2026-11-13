@@ -33,7 +33,10 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
-            urlPattern: /^\/api\/(perfumes|meta|similar|autocomplete)/,
+            // функция, а не RegExp: Workbox сравнивает RegExp с полным URL
+            urlPattern: ({ url }) =>
+              url.origin === self.location.origin &&
+              /^\/api\/(perfumes|meta|similar|autocomplete|config)/.test(url.pathname),
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'veroniks-api',
@@ -51,6 +54,8 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // разрешаем адреса туннеля cloudflared (*.trycloudflare.com)
+    allowedHosts: true,
     proxy: {
       '/api': 'http://localhost:8787',
     },
