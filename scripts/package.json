@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
     "@veroniks/shared": "*",
-    "sharp": "^0.33.5"
+    "csv-parse": "^5.6.0",
+    "sharp": "^0.33.5",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^22.10.2"
