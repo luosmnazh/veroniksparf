@@ -1,14 +1,107 @@
-.advisor__quote {
-  font-family: var(--font-display);
-  font-size: 1.05rem;
-  line-height: 1.55;
-  margin: var(--sp-3) 0 0;
+.advisor {
+  padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + 170px);
 }
 
-.advisor__sign {
-  text-align: right;
+.advisor__chat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.advisor__bubble {
+  max-width: 88%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  line-height: 1.45;
+}
+
+.advisor__bubble--host {
+  align-self: flex-start;
+  background: var(--leather);
+  border: var(--border-brass);
+  border-top-left-radius: 4px;
   font-family: var(--font-display);
+  font-size: 1rem;
+}
+
+.advisor__bubble--user {
+  align-self: flex-end;
+  background: var(--bordeaux);
+  color: var(--paper);
+  border-top-right-radius: 4px;
+}
+
+.advisor__answer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.advisor__pick .pitem {
+  margin-bottom: 0;
+}
+
+.advisor__pick .pitem__extra {
   font-style: italic;
-  margin: var(--sp-3) 0 0;
-  color: var(--bordeaux);
+  color: var(--ink);
+}
+
+.advisor__clarify {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.advisor__options,
+.advisor__quick {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.advisor__quick {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.advisor__quick::-webkit-scrollbar {
+  display: none;
+}
+
+.chip:disabled {
+  opacity: 0.45;
+}
+
+.advisor__typing {
+  padding: var(--sp-2) 0;
+}
+
+.advisor__composer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--nav-height) + env(safe-area-inset-bottom));
+  padding: var(--sp-2) var(--sp-4) var(--sp-3);
+  background: linear-gradient(180deg, rgba(20, 35, 27, 0) 0, var(--green-deep) 18px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  z-index: 40;
+}
+
+.advisor__composer > * {
+  width: 100%;
+  max-width: 528px;
+  margin: 0 auto;
+}
+
+.advisor__form {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.advisor__form .btn {
+  flex: 0 0 48px;
+  padding: 0;
 }

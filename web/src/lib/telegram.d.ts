@@ -3,6 +3,7 @@ interface TelegramWebApp {
   initDataUnsafe: { start_param?: string };
   ready(): void;
   expand(): void;
+  openLink(url: string): void;
   setHeaderColor(color: string): void;
   setBackgroundColor(color: string): void;
   BackButton: {

@@ -111,6 +111,11 @@ export function findSimilar(
   }
   candidateIds.delete(target.id);
 
+  // редкие ноты информативнее: ананас и берёза важнее мускуса и ванили
+  const total = all.length || 1;
+  const rarity = (n: string) => Math.log((total + 1) / ((idx.get(n)?.size ?? 0) + 1)) + 0.5;
+  const tw = noteWeights(target);
+
   const results: SimilarResult[] = [];
   for (const id of candidateIds) {
     const p = byId.get(id);
@@ -120,7 +125,12 @@ export function findSimilar(
     results.push({
       perfume: p,
       matchPercent: Math.round(Math.min(1, score) * 100),
-      commonNotes: commonNotes(target, p),
+      commonNotes: commonNotes(target, p).sort((x, y) => {
+        const wp = noteWeights(p);
+        const sx = ((tw.get(x) ?? 0) + (wp.get(x) ?? 0)) * rarity(x);
+        const sy = ((tw.get(y) ?? 0) + (wp.get(y) ?? 0)) * rarity(y);
+        return sy - sx;
+      }),
     });
   }
   results.sort(

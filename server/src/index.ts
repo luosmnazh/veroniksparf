@@ -1,37 +1,105 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyRequest } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import 'dotenv/config';
-import { findSimilar, noteRu } from '@veroniks/shared';
-import {
-  autocomplete,
-  getMeta,
-  getPerfume,
-  listPerfumes,
-  openDb,
-  seedIfEmpty,
-} from './db';
+import dotenv from 'dotenv';
+import { QUICK_PROMPTS, findSimilar, noteRu } from '@veroniks/shared';
+import { autocomplete, getMeta, getPerfume, listPerfumes, openDb, seedIfEmpty } from './db';
 import { Catalog } from './catalog';
+import { createAdvisor } from './advisor';
+import { createBot, startBot } from './bot';
+import { RateLimiter } from './rate-limit';
+import {
+  isAllowed,
+  issueAccessKey,
+  parseAllowedIds,
+  validateInitData,
+  verifyAccessKey,
+} from './telegram-auth';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../..');
+dotenv.config({ path: path.join(ROOT, '.env') });
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DB_PATH = process.env.DATABASE_PATH
   ? path.resolve(ROOT, process.env.DATABASE_PATH)
   : path.join(ROOT, 'data', 'veroniks.db');
+const BOT_TOKEN = process.env.BOT_TOKEN?.trim() ?? '';
+const WEBAPP_URL = process.env.WEBAPP_URL?.trim().replace(/\/$/, '') || null;
+const ALLOWED = parseAllowedIds(process.env.ALLOWED_USER_IDS);
+const BOT_MODE: 'webhook' | 'polling' =
+  process.env.BOT_MODE === 'webhook' || (process.env.NODE_ENV === 'production' && process.env.BOT_MODE !== 'polling')
+    ? 'webhook'
+    : 'polling';
 
 const db = openDb(DB_PATH);
 seedIfEmpty(db);
 const catalog = new Catalog(db);
 
-const app = Fastify({ logger: { level: 'info' } });
+const app = Fastify({
+  logger: {
+    level: 'info',
+    // секреты не должны попадать в логи
+    redact: ['req.headers["x-telegram-init-data"]', 'req.headers["x-veroniks-key"]'],
+  },
+});
+const log = (msg: string) => app.log.info(msg);
+const advisor = createAdvisor(log);
+
+// ---------- Доступ: белый список ----------
+
+const apiLimiter = new RateLimiter(240, 60_000);
+const advisorLimiter = new RateLimiter(20, 60_000);
+const OPEN_ROUTES = new Set(['/api/health', '/api/config', '/api/auth/key']);
+
+function resolveUser(req: FastifyRequest): number | null {
+  const initData = req.headers['x-telegram-init-data'];
+  if (typeof initData === 'string' && BOT_TOKEN) {
+    const user = validateInitData(initData, BOT_TOKEN);
+    if (user) return user.id;
+  }
+  const key = req.headers['x-veroniks-key'];
+  if (typeof key === 'string' && BOT_TOKEN) return verifyAccessKey(key, BOT_TOKEN);
+  return null;
+}
+
+app.addHook('onRequest', async (req, reply) => {
+  if (!req.url.startsWith('/api/')) return;
+  const route = req.url.split('?')[0];
+  const userId = resolveUser(req);
+  const who = userId ? `u${userId}` : `ip${req.ip}`;
+  if (!apiLimiter.take(who)) {
+    return reply.code(429).send({ error: 'Слишком много запросов. Переведите дух, сэр.' });
+  }
+  if (OPEN_ROUTES.has(route) || ALLOWED.size === 0) return;
+  if (!isAllowed(userId ?? undefined, ALLOWED)) {
+    return reply.code(401).send({
+      error: 'Клуб закрытый. Откройте приложение через бота @veroniksparfbot.',
+      code: 'auth',
+    });
+  }
+});
 
 // ---------- API ----------
 
 app.get('/api/health', async () => ({ ok: true }));
+
+app.get('/api/config', async () => ({
+  restricted: ALLOWED.size > 0,
+  advisorEngine: advisor.kind,
+  quickPrompts: QUICK_PROMPTS,
+}));
+
+/** Обмен initData на постоянный ключ — для установки PWA вне Telegram. */
+app.post<{ Body: { initData?: string } }>('/api/auth/key', async (req, reply) => {
+  const user = BOT_TOKEN ? validateInitData(req.body?.initData ?? '', BOT_TOKEN) : null;
+  if (!user || !isAllowed(user.id, ALLOWED)) {
+    return reply.code(401).send({ error: 'Не удалось подтвердить членство в клубе.', code: 'auth' });
+  }
+  return { key: issueAccessKey(user.id, BOT_TOKEN) };
+});
 
 app.get('/api/meta', async () => getMeta(db));
 
@@ -91,25 +159,49 @@ app.get<{ Querystring: { id?: string; limit?: string } }>('/api/similar', async 
   }));
 });
 
+app.post<{ Body: { message?: string; context?: string } }>('/api/advisor', async (req, reply) => {
+  const message = (req.body?.message ?? '').trim().slice(0, 500);
+  const context = req.body?.context?.trim().slice(0, 500) || undefined;
+  if (!message) return reply.code(400).send({ error: 'Пустой запрос' });
+  const who = resolveUser(req) ?? req.ip;
+  if (!advisorLimiter.take(String(who))) {
+    return reply.code(429).send({ error: 'Не так быстро, сэр. Минутку на раздумья.' });
+  }
+  const r = await advisor.reply({ message, context }, catalog);
+  return {
+    ...r,
+    picks: r.picks.map((p) => ({ ...p, matchedNotesRu: p.matchedNotes.map(noteRu) })),
+  };
+});
+
 // ---------- Статика (собранный фронт) ----------
 
 const webDist = path.join(ROOT, 'web', 'dist');
 if (fs.existsSync(webDist)) {
   app.register(fastifyStatic, { root: webDist, wildcard: false });
   app.setNotFoundHandler((req, reply) => {
-    if (req.url.startsWith('/api/')) {
-      reply.code(404).send({ error: 'Не найдено' });
-    } else {
-      reply.sendFile('index.html');
-    }
+    if (req.url.startsWith('/api/')) reply.code(404).send({ error: 'Не найдено' });
+    else reply.sendFile('index.html');
   });
 }
 
+// ---------- Бот ----------
+
+if (BOT_TOKEN) {
+  const bot = createBot({ token: BOT_TOKEN, webappUrl: WEBAPP_URL, allowed: ALLOWED, catalog, advisor, log });
+  startBot(bot, app, WEBAPP_URL, BOT_MODE, log).catch((e) =>
+    app.log.error(`Бот не запустился: ${e instanceof Error ? e.message : e}`),
+  );
+} else {
+  log('BOT_TOKEN не задан — бот выключен, работает только веб-приложение');
+}
+
+if (ALLOWED.size === 0) log('ALLOWED_USER_IDS пуст — доступ открыт всем (режим для тестов)');
+else log(`Белый список: ${ALLOWED.size} участник(ов)`);
+
 app
   .listen({ port: PORT, host: '0.0.0.0' })
-  .then(() => {
-    app.log.info(`Veroniks server: http://localhost:${PORT}`);
-  })
+  .then(() => log(`Veroniks: http://localhost:${PORT}`))
   .catch((err) => {
     app.log.error(err);
     process.exit(1);

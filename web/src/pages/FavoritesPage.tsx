@@ -3,7 +3,41 @@ import { api, type PerfumeDto } from '../lib/api';
 import { PageHeader } from '../components/PageHeader';
 import { PerfumeListItem } from '../components/PerfumeListItem';
 import { getList, type ListKind } from '../lib/favorites';
+import { getAccessKey } from '../lib/api';
 import './FavoritesPage.css';
+
+/** Подсказка про установку на главный экран (PWA). */
+function InstallHint() {
+  const tg = window.Telegram?.WebApp;
+  const inTelegram = Boolean(tg?.initData);
+
+  const openInBrowser = () => {
+    const key = getAccessKey();
+    const url = `${window.location.origin}/advisor${key ? `?key=${encodeURIComponent(key)}` : ''}`;
+    tg?.openLink(url);
+  };
+
+  return (
+    <div className="panel fav__install">
+      <div className="label">Клуб на главном экране</div>
+      {inTelegram ? (
+        <>
+          <p>
+            Откройте Veroniks в браузере и добавьте на главный экран — будет работать как
+            приложение, даже без сети.
+          </p>
+          <button className="btn btn--ghost" onClick={openInBrowser}>
+            Открыть в браузере ↗
+          </button>
+        </>
+      ) : (
+        <p>
+          iPhone: «Поделиться» → «На экран “Домой”». Android: меню ⋮ → «Добавить на главный экран».
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function FavoritesPage() {
   const [kind, setKind] = useState<ListKind>('favorites');
@@ -47,6 +81,8 @@ export function FavoritesPage() {
         </div>
       )}
       {items?.map((p) => <PerfumeListItem key={p.id} perfume={p} />)}
+
+      <InstallHint />
     </main>
   );
 }
