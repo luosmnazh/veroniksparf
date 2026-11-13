@@ -1,0 +1,247 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--green-deep);
+  background-image: var(--tweed);
+  color: var(--paper);
+  font-family: var(--font-text);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+}
+
+#root {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  margin: 0;
+  color: var(--paper);
+}
+
+h1 {
+  font-size: var(--fs-h1);
+}
+h2 {
+  font-size: var(--fs-h2);
+}
+h3 {
+  font-size: var(--fs-h3);
+}
+
+a {
+  color: var(--brass);
+}
+
+button {
+  font-family: var(--font-text);
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  font-family: var(--font-text);
+  font-size: 16px; /* не даёт iOS зумить при фокусе */
+}
+
+/* ─── Общие классы ─── */
+
+.page {
+  flex: 1;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: var(--sp-4) var(--sp-4) calc(var(--nav-height) + env(safe-area-inset-bottom) + 24px);
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--brass);
+}
+
+.label--ink {
+  color: var(--ink-soft);
+}
+
+/* Карточка-«досье»: кремовая бумага, латунная рамка, тиснение */
+.dossier {
+  background: var(--paper);
+  color: var(--ink);
+  border: var(--border-brass);
+  outline: 1px solid rgba(201, 164, 92, 0.35);
+  outline-offset: 3px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card), var(--shadow-emboss);
+  padding: var(--sp-4);
+}
+
+.dossier h1,
+.dossier h2,
+.dossier h3 {
+  color: var(--ink);
+}
+
+/* Тёмная панель (кожа) */
+.panel {
+  background: var(--leather);
+  border: var(--border-brass);
+  border-radius: var(--radius);
+  padding: var(--sp-4);
+  box-shadow: var(--shadow-card);
+}
+
+/* Кнопки */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: 44px;
+  padding: 0 var(--sp-4);
+  border-radius: var(--radius-sm);
+  border: var(--border-brass-bright);
+  background: linear-gradient(180deg, var(--green-soft), var(--green));
+  color: var(--brass-bright);
+  font-weight: 600;
+  font-size: var(--fs-body);
+  text-decoration: none;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.btn:active {
+  transform: translateY(1px);
+  filter: brightness(1.1);
+}
+
+.btn--brass {
+  background: linear-gradient(180deg, var(--brass-bright), var(--brass));
+  color: var(--ink);
+  border-color: var(--brass-dim);
+}
+
+.btn--ghost {
+  background: transparent;
+  border-color: var(--brass-dim);
+  color: var(--brass);
+}
+
+.btn--bordeaux {
+  background: linear-gradient(180deg, var(--bordeaux-bright), var(--bordeaux));
+  color: var(--paper);
+  border-color: var(--bordeaux);
+}
+
+/* Теги */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 1px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--brass-dim);
+  color: var(--ink-soft);
+  background: rgba(201, 164, 92, 0.14);
+  font-size: var(--fs-small);
+  white-space: nowrap;
+}
+
+.tag--dark {
+  color: var(--brass);
+  background: rgba(201, 164, 92, 0.08);
+}
+
+/* Чипы фильтров */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--brass-dim);
+  background: transparent;
+  color: var(--paper);
+  font-size: var(--fs-small);
+  white-space: nowrap;
+}
+
+.chip--active {
+  background: var(--brass);
+  color: var(--ink);
+  border-color: var(--brass);
+  font-weight: 600;
+}
+
+/* Поля ввода */
+.input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 var(--sp-4);
+  border-radius: var(--radius-sm);
+  border: var(--border-brass);
+  background: var(--leather);
+  color: var(--paper);
+  outline: none;
+}
+
+.input::placeholder {
+  color: rgba(239, 230, 210, 0.45);
+}
+
+.input:focus {
+  border-color: var(--brass);
+}
+
+/* Появление карточек */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rise {
+  animation: rise-in 0.35s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Латунный разделитель с «гравировкой» */
+.rule {
+  border: none;
+  height: 1px;
+  margin: var(--sp-4) 0;
+  background: linear-gradient(90deg, transparent, var(--brass-dim) 20%, var(--brass-dim) 80%, transparent);
+}

@@ -1,0 +1,10 @@
+.fav__tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: var(--sp-4);
+}
+
+.fav__status {
+  text-align: center;
+  padding: var(--sp-4);
+}

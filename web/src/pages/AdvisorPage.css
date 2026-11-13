@@ -1,0 +1,14 @@
+.advisor__quote {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  line-height: 1.55;
+  margin: var(--sp-3) 0 0;
+}
+
+.advisor__sign {
+  text-align: right;
+  font-family: var(--font-display);
+  font-style: italic;
+  margin: var(--sp-3) 0 0;
+  color: var(--bordeaux);
+}

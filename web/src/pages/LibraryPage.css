@@ -1,0 +1,29 @@
+.lib__chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: var(--sp-3) 0;
+  scrollbar-width: none;
+}
+
+.lib__chips::-webkit-scrollbar {
+  display: none;
+}
+
+.lib__filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.lib__filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lib__status {
+  text-align: center;
+  padding: var(--sp-4);
+}

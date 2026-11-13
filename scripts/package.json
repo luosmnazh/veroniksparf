@@ -1,0 +1,13 @@
+{
+  "name": "@veroniks/scripts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@veroniks/shared": "*",
+    "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2"
+  }
+}

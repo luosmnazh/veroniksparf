@@ -1,0 +1,27 @@
+{
+  "name": "veroniks",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Veroniks — парфюмерный советник (PWA + Telegram Mini App)",
+  "workspaces": [
+    "shared",
+    "server",
+    "web",
+    "scripts"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c green,yellow \"npm run dev -w server\" \"npm run dev -w web\"",
+    "build": "npm run build -w web",
+    "start": "npm run start -w server",
+    "test": "vitest run",
+    "import-csv": "tsx scripts/src/import-csv.ts",
+    "describe-ai": "tsx scripts/src/describe-ai.ts",
+    "gen-icons": "tsx scripts/src/gen-icons.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

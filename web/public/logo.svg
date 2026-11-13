@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Гербовая монограмма Veroniks -->
+  <rect width="128" height="128" rx="20" fill="#14231B"/>
+  <rect x="4" y="4" width="120" height="120" rx="16" fill="none" stroke="#8C7340" stroke-width="1.5"/>
+  <!-- щит -->
+  <path d="M28 24 h72 v38 c0 24 -16 37 -36 44 c-20 -7 -36 -20 -36 -44 z"
+        fill="#1E3328" stroke="#C9A45C" stroke-width="2.5"/>
+  <path d="M34 30 h60 v31 c0 20 -13 31 -30 37 c-17 -6 -30 -17 -30 -37 z"
+        fill="none" stroke="#8C7340" stroke-width="1"/>
+  <!-- буква V -->
+  <path d="M44 40 h15 l7 28 l7 -28 h13 l-14 46 h-13 z" fill="#C9A45C"/>
+  <!-- детали -->
+  <circle cx="64" cy="33" r="2.2" fill="#C9A45C"/>
+  <path d="M40 104 h48" stroke="#8C7340" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M48 110 h32" stroke="#6E1F1F" stroke-width="2" stroke-linecap="round"/>
+</svg>

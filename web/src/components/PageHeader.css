@@ -1,0 +1,10 @@
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.page-header__title {
+  line-height: 1.15;
+}

@@ -1,0 +1,60 @@
+/* ─── Veroniks: дизайн-токены ─────────────────────────────── */
+:root {
+  /* Палитра клуба */
+  --green-deep: #14231b;
+  --green: #1e3328;
+  --green-soft: #2a4435;
+  --brass: #c9a45c;
+  --brass-bright: #e0bf7d;
+  --brass-dim: #8c7340;
+  --bordeaux: #6e1f1f;
+  --bordeaux-bright: #933131;
+  --paper: #efe6d2;
+  --paper-dim: #e3d7bd;
+  --paper-shadow: #cfc1a1;
+  --leather: #2a1d16;
+  --leather-soft: #3a2a20;
+  --ink: #241d12;
+  --ink-soft: #4d4433;
+
+  /* Типографика */
+  --font-display: 'Playfair Display', 'Georgia', serif;
+  --font-text: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+
+  --fs-h1: 1.75rem;
+  --fs-h2: 1.35rem;
+  --fs-h3: 1.1rem;
+  --fs-body: 0.95rem;
+  --fs-small: 0.8rem;
+  --fs-label: 0.68rem;
+
+  /* Отступы */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  /* Радиусы и рамки */
+  --radius: 10px;
+  --radius-sm: 6px;
+  --border-brass: 1px solid var(--brass-dim);
+  --border-brass-bright: 1px solid var(--brass);
+
+  /* Тени */
+  --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.35);
+  --shadow-emboss: inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+
+  /* Навигация */
+  --nav-height: 60px;
+
+  /* Фактура твида: тонкая диагональная штриховка двух направлений */
+  --tweed: repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.015) 0 2px,
+      transparent 2px 6px
+    ),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.06) 0 2px, transparent 2px 6px);
+}
