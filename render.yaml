@@ -1,5 +1,6 @@
-# Blueprint для Render: Dashboard → New → Blueprint → выбрать этот репозиторий.
-# Секреты (BOT_TOKEN и др.) Render спросит при создании — в файл их не пишем.
+# Blueprint для Render. Кнопка «Deploy to Render» в README открывает эту
+# конфигурацию; Render спросит только BOT_TOKEN и ALLOWED_USER_IDS.
+# Адрес приложения (WEBAPP_URL) сервер определит сам по RENDER_EXTERNAL_URL.
 services:
   - type: web
     name: veroniks
@@ -9,16 +10,12 @@ services:
     envVars:
       - key: BOT_TOKEN
         sync: false
-      - key: WEBAPP_URL
-        sync: false
       - key: ALLOWED_USER_IDS
-        sync: false
-      - key: ANTHROPIC_API_KEY
-        sync: false
-      - key: ANTHROPIC_MODEL
         sync: false
       - key: DATABASE_PATH
         value: /data/veroniks.db
+# Ключ ИИ добавляется позже: Render → сервис → Environment → ANTHROPIC_API_KEY.
+#
 # Постоянный диск доступен только на платных планах. На бесплатном база
 # пересоздаётся из встроенного набора при каждом перезапуске — для каталога
 # это нормально: избранное хранится в Telegram/браузере, а не в базе.

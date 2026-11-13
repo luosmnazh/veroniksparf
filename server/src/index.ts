@@ -27,7 +27,17 @@ const DB_PATH = process.env.DATABASE_PATH
   ? path.resolve(ROOT, process.env.DATABASE_PATH)
   : path.join(ROOT, 'data', 'veroniks.db');
 const BOT_TOKEN = process.env.BOT_TOKEN?.trim() ?? '';
-const WEBAPP_URL = process.env.WEBAPP_URL?.trim().replace(/\/$/, '') || null;
+/** Публичный адрес: из .env, иначе тот, что сообщает хостинг (Render, Railway). */
+function detectWebappUrl(): string | null {
+  const explicit = process.env.WEBAPP_URL?.trim();
+  if (explicit) return explicit.replace(/\/$/, '');
+  const render = process.env.RENDER_EXTERNAL_URL?.trim();
+  if (render) return render.replace(/\/$/, '');
+  const railway = process.env.RAILWAY_PUBLIC_DOMAIN?.trim();
+  if (railway) return `https://${railway}`;
+  return null;
+}
+const WEBAPP_URL = detectWebappUrl();
 const ALLOWED = parseAllowedIds(process.env.ALLOWED_USER_IDS);
 const BOT_MODE: 'webhook' | 'polling' =
   process.env.BOT_MODE === 'webhook' || (process.env.NODE_ENV === 'production' && process.env.BOT_MODE !== 'polling')
@@ -196,6 +206,7 @@ if (BOT_TOKEN) {
   log('BOT_TOKEN не задан — бот выключен, работает только веб-приложение');
 }
 
+log(WEBAPP_URL ? `Адрес приложения: ${WEBAPP_URL}` : 'Адрес приложения не задан (WEBAPP_URL)');
 if (ALLOWED.size === 0) log('ALLOWED_USER_IDS пуст — доступ открыт всем (режим для тестов)');
 else log(`Белый список: ${ALLOWED.size} участник(ов)`);
 
