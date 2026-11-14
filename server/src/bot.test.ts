@@ -7,6 +7,7 @@ const catalog = {
   all: () => SEED_PERFUMES,
   get: (id: string) => SEED_PERFUMES.find((p) => p.id === id),
   index: () => buildNoteIndex(SEED_PERFUMES),
+  byId: () => new Map(SEED_PERFUMES.map((p) => [p.id, p])),
 } as unknown as Catalog;
 
 const botInfo = {

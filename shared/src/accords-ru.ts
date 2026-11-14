@@ -85,6 +85,10 @@ export const ACCORDS_RU: Record<string, string> = {
   cannabis: 'каннабисовый',
   hay: 'сенной',
   tonka: 'ванильный',
+  patchouli: 'пачулевый',
+  sand: 'песочный',
+  plum: 'фруктовый',
+  'white musk': 'мускусный',
   cocoa: 'шоколадный',
 };
 

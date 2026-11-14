@@ -12,8 +12,15 @@ const W_ACCORDS = 0.35;
 const W_FAMILY = 0.1;
 
 /** Карта «нота → вес» для аромата. Если нота в нескольких ярусах — берём максимум. */
+const noteWeightCache = new WeakMap<Perfume, Map<string, number>>();
+const accordCache = new WeakMap<Perfume, { vec: Map<string, number>; norm: number }>();
+
+/** Карта «нота → вес» (кэшируется: каталог большой, а ароматы неизменяемы). */
 export function noteWeights(p: Perfume): Map<string, number> {
+  const cached = noteWeightCache.get(p);
+  if (cached) return cached;
   const m = new Map<string, number>();
+  noteWeightCache.set(p, m);
   const put = (notes: string[], w: number) => {
     for (const n of notes) m.set(n, Math.max(m.get(n) ?? 0, w));
   };
@@ -42,18 +49,27 @@ export function weightedJaccard(a: Map<string, number>, b: Map<string, number>):
 }
 
 /** Косинусная близость векторов аккордов (имя → вес). */
+function accordVector(p: Perfume): { vec: Map<string, number>; norm: number } {
+  let v = accordCache.get(p);
+  if (!v) {
+    const vec = new Map(p.accords.map((x) => [x.name, x.weight]));
+    const norm = Math.sqrt(p.accords.reduce((s, x) => s + x.weight * x.weight, 0));
+    accordCache.set(p, (v = { vec, norm }));
+  }
+  return v;
+}
+
 export function accordCosine(a: Perfume, b: Perfume): number {
   if (a.accords.length === 0 || b.accords.length === 0) return 0;
-  const va = new Map(a.accords.map((x) => [x.name, x.weight]));
-  const vb = new Map(b.accords.map((x) => [x.name, x.weight]));
+  const va = accordVector(a);
+  const vb = accordVector(b);
+  if (va.norm === 0 || vb.norm === 0) return 0;
   let dot = 0;
-  for (const [name, w] of va) {
-    const w2 = vb.get(name);
+  for (const [name, w] of va.vec) {
+    const w2 = vb.vec.get(name);
     if (w2) dot += w * w2;
   }
-  const na = Math.sqrt([...va.values()].reduce((s, w) => s + w * w, 0));
-  const nb = Math.sqrt([...vb.values()].reduce((s, w) => s + w * w, 0));
-  return na === 0 || nb === 0 ? 0 : dot / (na * nb);
+  return dot / (va.norm * vb.norm);
 }
 
 /** Итоговая близость двух ароматов, 0..1. */
@@ -89,11 +105,26 @@ export interface FindSimilarOptions {
   limit?: number;
   /** Готовый индекс нот (если база большая и индекс переиспользуется). */
   noteIndex?: Map<string, Set<string>>;
+  /** Готовая карта id → аромат (чтобы не строить её на каждый запрос). */
+  byId?: Map<string, Perfume>;
 }
 
 /**
  * Топ похожих ароматов. Сначала кандидаты по общим нотам (через индекс),
  * потом точный скоринг.
+ */
+/**
+ * Небольшой бонус за известность (число голосов) — только для порядка выдачи:
+ * из почти одинаково похожих выше окажется тот, что знаком людям.
+ * Процент совпадения на экране остаётся честным.
+ */
+export function popularityBonus(votes: number | null): number {
+  return votes && votes > 0 ? 0.015 * Math.log10(votes + 1) : 0;
+}
+
+/**
+ * Топ похожих ароматов. Сначала кандидаты по общим нотам (через индекс),
+ * потом точный скоринг; общие ноты считаются только для победителей.
  */
 export function findSimilar(
   target: Perfume,
@@ -102,7 +133,7 @@ export function findSimilar(
 ): SimilarResult[] {
   const limit = opts.limit ?? 10;
   const idx = opts.noteIndex ?? buildNoteIndex(all);
-  const byId = new Map(all.map((p) => [p.id, p]));
+  const byId = opts.byId ?? new Map(all.map((p) => [p.id, p]));
 
   const candidateIds = new Set<string>();
   for (const n of new Set([...target.notesTop, ...target.notesHeart, ...target.notesBase])) {
@@ -111,32 +142,27 @@ export function findSimilar(
   }
   candidateIds.delete(target.id);
 
-  // редкие ноты информативнее: ананас и берёза важнее мускуса и ванили
-  const total = all.length || 1;
-  const rarity = (n: string) => Math.log((total + 1) / ((idx.get(n)?.size ?? 0) + 1)) + 0.5;
-  const tw = noteWeights(target);
-
-  const results: SimilarResult[] = [];
+  const scored: { p: Perfume; score: number; rank: number }[] = [];
   for (const id of candidateIds) {
     const p = byId.get(id);
     if (!p) continue;
     const score = similarityScore(target, p);
     if (score <= 0.02) continue;
-    results.push({
+    scored.push({ p, score, rank: score + popularityBonus(p.votes) });
+  }
+  scored.sort((a, b) => b.rank - a.rank);
+
+  // редкие ноты информативнее: ананас и берёза важнее мускуса и ванили
+  const total = all.length || 1;
+  const rarity = (n: string) => Math.log((total + 1) / ((idx.get(n)?.size ?? 0) + 1)) + 0.5;
+  const tw = noteWeights(target);
+  return scored.slice(0, limit).map(({ p, score }) => {
+    const wp = noteWeights(p);
+    const weight = (n: string) => ((tw.get(n) ?? 0) + (wp.get(n) ?? 0)) * rarity(n);
+    return {
       perfume: p,
       matchPercent: Math.round(Math.min(1, score) * 100),
-      commonNotes: commonNotes(target, p).sort((x, y) => {
-        const wp = noteWeights(p);
-        const sx = ((tw.get(x) ?? 0) + (wp.get(x) ?? 0)) * rarity(x);
-        const sy = ((tw.get(y) ?? 0) + (wp.get(y) ?? 0)) * rarity(y);
-        return sy - sx;
-      }),
-    });
-  }
-  results.sort(
-    (a, b) =>
-      b.matchPercent - a.matchPercent ||
-      (b.perfume.rating ?? 0) - (a.perfume.rating ?? 0),
-  );
-  return results.slice(0, limit);
+      commonNotes: commonNotes(target, p).sort((x, y) => weight(y) - weight(x)),
+    };
+  });
 }

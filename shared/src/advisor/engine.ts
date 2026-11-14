@@ -41,6 +41,7 @@ export interface AdvisorReply {
 export interface AdvisorCatalog {
   all(): Perfume[];
   index?(): Map<string, Set<string>>;
+  byId?(): Map<string, Perfume>;
 }
 
 export interface AdvisorEngine {
@@ -109,6 +110,22 @@ export const AFFORDABLE_BRANDS = new Set(
   ].map((b) => b.toLowerCase()),
 );
 
+/** Средняя оценка каталога и «вес» этого среднего в голосах. */
+const PRIOR_RATING = 3.9;
+const PRIOR_VOTES = 300;
+
+/** Взвешенный (байесовский) рейтинг: мало голосов — ближе к средней оценке. */
+export function weightedRating(p: Pick<Perfume, 'rating' | 'votes'>): number {
+  const v = p.votes ?? 0;
+  const r = p.rating ?? PRIOR_RATING;
+  return (v * r + PRIOR_VOTES * PRIOR_RATING) / (v + PRIOR_VOTES);
+}
+
+/** Бонус за репутацию: качество (взвешенный рейтинг) + известность. */
+export function reputation(p: Perfume): number {
+  return (weightedRating(p) - 3.9) * 2 + Math.min(Math.log10((p.votes ?? 0) + 1), 4.5) * 0.25;
+}
+
 function allNotes(p: Perfume): Set<string> {
   return new Set([...p.notesTop, ...p.notesHeart, ...p.notesBase]);
 }
@@ -163,9 +180,8 @@ export function scorePerfume(p: Perfume, q: ParsedQuery): Scored {
   }
   if (q.cheaper && AFFORDABLE_BRANDS.has(p.brand.toLowerCase())) score += 1.5;
 
-  // репутация: небольшой бонус, чтобы при равенстве побеждала классика
-  if (p.rating) score += (p.rating - 3.8) * 0.8;
-  if (p.votes) score += Math.min(Math.log10(p.votes), 5) * 0.05;
+  // репутация: взвешенный рейтинг (оценка от 30 человек весит меньше, чем от 20 000)
+  score += reputation(p);
 
   return { perfume: p, score, signal, matchedNotes, matchedAccords };
 }
@@ -388,14 +404,15 @@ export class RuleAdvisor implements AdvisorEngine {
       const similar = findSimilar(target, perfumes, {
         limit: 40,
         noteIndex: catalog.index?.(),
+        byId: catalog.byId?.(),
       });
       const ranked = similar
         .map((r) => {
           const s = scorePerfume(r.perfume, q);
           // похожесть — главный критерий, остальное корректирует
-          const rating = r.perfume.rating ? (r.perfume.rating - 3.8) * 0.8 : 0;
-          const extras = s.score - s.signal - rating;
-          return { r, s, total: r.matchPercent / 10 + extras + s.signal * 0.5 };
+          const extras = s.score - s.signal - reputation(r.perfume);
+          const fame = 0.15 * Math.log10((r.perfume.votes ?? 0) + 1);
+          return { r, s, total: r.matchPercent / 10 + extras + s.signal * 0.5 + fame };
         })
         .filter((x) => x.total > -50)
         .sort((a, b) => b.total - a.total)

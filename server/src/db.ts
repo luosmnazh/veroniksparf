@@ -2,7 +2,9 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Perfume, Tier } from '@veroniks/shared';
-import { SEED_PERFUMES, describePerfume } from '@veroniks/shared';
+import { DESCRIBE_TEMPLATE_VERSION, SEED_PERFUMES, describePerfume } from '@veroniks/shared';
+import crypto from 'node:crypto';
+import type { LoadedCatalog } from './catalog-file';
 
 export type DB = Database.Database;
 
@@ -55,19 +57,48 @@ function migrate(db: DB): void {
   `);
 }
 
-export function upsertPerfume(db: DB, p: Perfume, imageUrl?: string | null): void {
-  db.prepare(
-    `INSERT INTO perfumes (id, name, brand, year, gender, family, accords, seasons, occasions,
-       rating, votes, description, fragrantica_url, image_url)
-     VALUES (@id, @name, @brand, @year, @gender, @family, @accords, @seasons, @occasions,
-       @rating, @votes, @description, @fragranticaUrl, @imageUrl)
-     ON CONFLICT(id) DO UPDATE SET
-       name=excluded.name, brand=excluded.brand, year=excluded.year, gender=excluded.gender,
-       family=excluded.family, accords=excluded.accords, seasons=excluded.seasons,
-       occasions=excluded.occasions, rating=excluded.rating, votes=excluded.votes,
-       description=excluded.description, fragrantica_url=excluded.fragrantica_url,
-       image_url=COALESCE(excluded.image_url, perfumes.image_url)`,
-  ).run({
+/** Подготовленные запросы — по одному набору на базу, чтобы массовая вставка была быстрой. */
+const statements = new WeakMap<DB, ReturnType<typeof prepareStatements>>();
+
+function prepareStatements(db: DB) {
+  return {
+    upsert: db.prepare(
+      `INSERT INTO perfumes (id, name, brand, year, gender, family, accords, seasons, occasions,
+         rating, votes, description, description_source, fragrantica_url, image_url)
+       VALUES (@id, @name, @brand, @year, @gender, @family, @accords, @seasons, @occasions,
+         @rating, @votes, @description, @descriptionSource, @fragranticaUrl, @imageUrl)
+       ON CONFLICT(id) DO UPDATE SET
+         name=excluded.name, brand=excluded.brand, year=excluded.year, gender=excluded.gender,
+         family=excluded.family, accords=excluded.accords, seasons=excluded.seasons,
+         occasions=excluded.occasions, rating=excluded.rating, votes=excluded.votes,
+         description=excluded.description, description_source=excluded.description_source,
+         fragrantica_url=excluded.fragrantica_url,
+         image_url=COALESCE(excluded.image_url, perfumes.image_url)`,
+    ),
+    deleteLinks: db.prepare('DELETE FROM perfume_notes WHERE perfume_id = ?'),
+    insertNote: db.prepare('INSERT OR IGNORE INTO notes (name) VALUES (?)'),
+    getNote: db.prepare('SELECT id FROM notes WHERE name = ?'),
+    insertLink: db.prepare(
+      'INSERT OR IGNORE INTO perfume_notes (perfume_id, note_id, tier) VALUES (?, ?, ?)',
+    ),
+  };
+}
+
+function stmts(db: DB) {
+  let s = statements.get(db);
+  if (!s) statements.set(db, (s = prepareStatements(db)));
+  return s;
+}
+
+export function upsertPerfume(
+  db: DB,
+  p: Perfume,
+  imageUrl?: string | null,
+  descriptionSource: 'template' | 'ai' = 'template',
+  noteIds?: Map<string, number>,
+): void {
+  const st = stmts(db);
+  st.upsert.run({
     id: p.id,
     name: p.name,
     brand: p.brand,
@@ -80,43 +111,100 @@ export function upsertPerfume(db: DB, p: Perfume, imageUrl?: string | null): voi
     rating: p.rating,
     votes: p.votes,
     description: p.description,
+    descriptionSource,
     fragranticaUrl: p.fragranticaUrl,
     imageUrl: imageUrl ?? null,
   });
 
-  db.prepare('DELETE FROM perfume_notes WHERE perfume_id = ?').run(p.id);
-  const insNote = db.prepare('INSERT OR IGNORE INTO notes (name) VALUES (?)');
-  const getNote = db.prepare('SELECT id FROM notes WHERE name = ?');
-  const insLink = db.prepare(
-    'INSERT OR IGNORE INTO perfume_notes (perfume_id, note_id, tier) VALUES (?, ?, ?)',
-  );
+  st.deleteLinks.run(p.id);
+  const noteId = (n: string): number => {
+    const cached = noteIds?.get(n);
+    if (cached) return cached;
+    st.insertNote.run(n);
+    const id = (st.getNote.get(n) as { id: number }).id;
+    noteIds?.set(n, id);
+    return id;
+  };
   const tiers: [Tier, string[]][] = [
     ['top', p.notesTop],
     ['heart', p.notesHeart],
     ['base', p.notesBase],
   ];
   for (const [tier, notes] of tiers) {
-    for (const n of notes) {
-      insNote.run(n);
-      const row = getNote.get(n) as { id: number };
-      insLink.run(p.id, row.id, tier);
-    }
+    for (const n of notes) st.insertLink.run(p.id, noteId(n), tier);
   }
 }
 
-export function seedIfEmpty(db: DB): void {
+/** Ароматы, из которых собирается база: встроенные (с данными датасета) + большой каталог. */
+export function catalogPerfumes(catalog: LoadedCatalog | null): {
+  perfumes: { perfume: Perfume; imageUrl: string | null }[];
+  fingerprint: string;
+} {
+  const seedHash = crypto.createHash('sha1').update(JSON.stringify(SEED_PERFUMES)).digest('hex').slice(0, 12);
+  const overrides = catalog?.data.overrides ?? {};
+  const out: { perfume: Perfume; imageUrl: string | null }[] = SEED_PERFUMES.map((p) => {
+    const o = overrides[p.id];
+    return {
+      perfume: o
+        ? {
+            ...p,
+            rating: o.rating ?? p.rating,
+            votes: o.votes ?? p.votes,
+            year: p.year ?? o.year,
+            fragranticaUrl: o.fragranticaUrl ?? p.fragranticaUrl,
+          }
+        : p,
+      imageUrl: o?.imageUrl ?? null,
+    };
+  });
+  for (const p of catalog?.data.perfumes ?? []) out.push({ perfume: p, imageUrl: null });
+  return {
+    perfumes: out,
+    fingerprint: `${seedHash}:${catalog?.fingerprint ?? 'none'}:t${DESCRIBE_TEMPLATE_VERSION}`,
+  };
+}
+
+/**
+ * Приводит базу в соответствие с каталогом. Пересборка — только если
+ * изменился встроенный набор или файл data/catalog.json.gz. ИИ-описания
+ * переживают пересборку.
+ */
+export function syncCatalog(db: DB, catalog: LoadedCatalog | null, log: (m: string) => void = () => {}): void {
+  db.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+  const { perfumes, fingerprint } = catalogPerfumes(catalog);
+  const current = db.prepare(`SELECT value FROM meta WHERE key = 'catalog'`).get() as
+    | { value: string }
+    | undefined;
   const { c } = db.prepare('SELECT COUNT(*) AS c FROM perfumes').get() as { c: number };
-  if (c > 0) return;
+  if (current?.value === fingerprint && c > 0) return;
+
+  const started = Date.now();
+  const aiDescriptions = new Map(
+    (
+      db
+        .prepare(`SELECT id, description FROM perfumes WHERE description_source = 'ai'`)
+        .all() as { id: string; description: string }[]
+    ).map((r) => [r.id, r.description]),
+  );
   const tx = db.transaction(() => {
-    for (const p of SEED_PERFUMES) {
-      const withDescription: Perfume = {
-        ...p,
-        description: p.description ?? describePerfume(p),
-      };
-      upsertPerfume(db, withDescription);
+    db.exec('DELETE FROM perfume_notes; DELETE FROM perfumes; DELETE FROM notes;');
+    const noteIds = new Map<string, number>();
+    for (const { perfume, imageUrl } of perfumes) {
+      const ai = aiDescriptions.get(perfume.id);
+      const description = ai ?? perfume.description ?? describePerfume(perfume);
+      upsertPerfume(db, { ...perfume, description }, imageUrl, ai ? 'ai' : 'template', noteIds);
     }
+    db.prepare(`INSERT INTO meta (key, value) VALUES ('catalog', ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(fingerprint);
   });
   tx();
+  log(`Каталог загружен: ${perfumes.length} ароматов за ${((Date.now() - started) / 1000).toFixed(1)} с`);
+}
+
+/** Совместимость: база только из встроенного набора (для тестов и скриптов). */
+export function seedIfEmpty(db: DB): void {
+  const { c } = db.prepare('SELECT COUNT(*) AS c FROM perfumes').get() as { c: number };
+  if (c === 0) syncCatalog(db, null);
 }
 
 interface PerfumeRow {
@@ -258,10 +346,11 @@ export function listPerfumes(
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const orderSql =
     f.sort === 'year'
-      ? 'ORDER BY year DESC NULLS LAST, rating DESC'
+      ? 'ORDER BY year DESC NULLS LAST, COALESCE(votes, 0) DESC'
       : f.sort === 'name'
         ? 'ORDER BY name COLLATE NOCASE ASC'
-        : 'ORDER BY (rating IS NULL), rating DESC, votes DESC';
+        : // взвешенный рейтинг: 4.9 от 30 голосов не обгоняет 4.3 от 20 000
+          'ORDER BY (COALESCE(votes, 0) * COALESCE(rating, 3.9) + 300 * 3.9) / (COALESCE(votes, 0) + 300) DESC, votes DESC';
 
   const { c } = db
     .prepare(`SELECT COUNT(*) AS c FROM perfumes ${whereSql}`)
@@ -321,7 +410,7 @@ export function autocomplete(db: DB, q: string, limit = 8): { id: string; name: 
        WHERE name LIKE @q COLLATE NOCASE OR brand LIKE @q COLLATE NOCASE
          OR (brand || ' ' || name) LIKE @q COLLATE NOCASE
          OR (name || ' ' || brand) LIKE @q COLLATE NOCASE
-       ORDER BY (rating IS NULL), rating DESC, votes DESC
+       ORDER BY COALESCE(votes, 0) DESC
        LIMIT @limit`,
     )
     .all({ q: `%${q.trim()}%`, limit }) as { id: string; name: string; brand: string }[];

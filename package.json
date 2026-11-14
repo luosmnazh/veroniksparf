@@ -16,7 +16,8 @@
     "test": "vitest run",
     "import-csv": "tsx scripts/src/import-csv.ts",
     "describe-ai": "tsx scripts/src/describe-ai.ts",
-    "gen-icons": "tsx scripts/src/gen-icons.ts"
+    "gen-icons": "tsx scripts/src/gen-icons.ts",
+    "build-catalog": "tsx scripts/src/build-catalog.ts"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

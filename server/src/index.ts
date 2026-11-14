@@ -5,7 +5,8 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import { QUICK_PROMPTS, findSimilar, noteRu } from '@veroniks/shared';
-import { autocomplete, getMeta, getPerfume, listPerfumes, openDb, seedIfEmpty } from './db';
+import { autocomplete, getMeta, getPerfume, listPerfumes, openDb, syncCatalog } from './db';
+import { loadCatalogFile } from './catalog-file';
 import { Catalog } from './catalog';
 import { createAdvisor } from './advisor';
 import { botStatus, createBot, describeBotError, startBot } from './bot';
@@ -45,8 +46,6 @@ const BOT_MODE: 'webhook' | 'polling' =
     : 'polling';
 
 const db = openDb(DB_PATH);
-seedIfEmpty(db);
-const catalog = new Catalog(db);
 
 const app = Fastify({
   logger: {
@@ -56,6 +55,12 @@ const app = Fastify({
   },
 });
 const log = (msg: string) => app.log.info(msg);
+
+// большой каталог из data/catalog.json.gz (если есть) + встроенные ароматы
+syncCatalog(db, loadCatalogFile(path.join(ROOT, 'data', 'catalog.json.gz')), log);
+const catalog = new Catalog(db);
+// прогрев: каталог и индекс нот — в память до первого запроса
+catalog.index();
 const advisor = createAdvisor(log);
 
 // ---------- Доступ: белый список ----------
@@ -116,7 +121,9 @@ app.post<{ Body: { initData?: string } }>('/api/auth/key', async (req, reply) =>
   return { key: issueAccessKey(user.id, BOT_TOKEN) };
 });
 
-app.get('/api/meta', async () => getMeta(db));
+// справочник фильтров: каталог во время работы не меняется — считаем один раз
+let metaCache: ReturnType<typeof getMeta> | null = null;
+app.get('/api/meta', async () => (metaCache ??= getMeta(db)));
 
 interface ListQuery {
   q?: string;
@@ -165,7 +172,7 @@ app.get<{ Querystring: { id?: string; limit?: string } }>('/api/similar', async 
   const target = catalog.get(id);
   if (!target) return reply.code(404).send({ error: 'Аромат не найден' });
   const limit = req.query.limit ? Math.min(Number(req.query.limit), 20) : 10;
-  const results = findSimilar(target, catalog.all(), { limit, noteIndex: catalog.index() });
+  const results = findSimilar(target, catalog.all(), { limit, noteIndex: catalog.index(), byId: catalog.byId() });
   return results.map((r) => ({
     perfume: r.perfume,
     matchPercent: r.matchPercent,

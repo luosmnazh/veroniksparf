@@ -107,7 +107,7 @@ export function LibraryPage() {
 
   return (
     <main className="page">
-      <PageHeader title="Библиотека" subtitle={meta ? `${meta.total} досье в архиве` : 'архив клуба'} />
+      <PageHeader title="Библиотека" subtitle={meta ? `${meta.total.toLocaleString('ru-RU')} досье в архиве` : 'архив клуба'} />
 
       <input
         className="input"

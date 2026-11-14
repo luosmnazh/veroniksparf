@@ -8,7 +8,7 @@ import type { DB } from './db';
  */
 export class Catalog {
   private perfumes: Perfume[] = [];
-  private byId = new Map<string, Perfume>();
+  private byIdMap = new Map<string, Perfume>();
   private noteIndex = new Map<string, Set<string>>();
   private loaded = false;
 
@@ -57,7 +57,7 @@ export class Catalog {
         notesBase: n.base,
       } as Perfume;
     });
-    this.byId = new Map(this.perfumes.map((p) => [p.id, p]));
+    this.byIdMap = new Map(this.perfumes.map((p) => [p.id, p]));
     this.noteIndex = buildNoteIndex(this.perfumes);
     this.loaded = true;
   }
@@ -69,7 +69,12 @@ export class Catalog {
 
   get(id: string): Perfume | undefined {
     this.load();
-    return this.byId.get(id);
+    return this.byIdMap.get(id);
+  }
+
+  byId(): Map<string, Perfume> {
+    this.load();
+    return this.byIdMap;
   }
 
   index(): Map<string, Set<string>> {

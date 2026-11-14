@@ -17,14 +17,12 @@ import 'dotenv/config';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parse } from 'csv-parse/sync';
-import * as XLSX from 'xlsx';
 import { describePerfume } from '@veroniks/shared';
 import { openDb, seedIfEmpty, upsertPerfume } from '../../server/src/db';
+import { readRows } from './read-table';
 import {
   buildMapping,
   dedupeRows,
-  detectDelimiter,
   hasNotesColumns,
   mapRow,
   matchKey,
@@ -41,43 +39,12 @@ function arg(name: string): string | undefined {
 }
 const hasFlag = (name: string) => process.argv.includes(`--${name}`);
 
-function readRows(file: string, encoding: string): { headers: string[]; rows: RawRow[] } {
-  const ext = path.extname(file).toLowerCase();
-  if (ext === '.xlsx' || ext === '.xls') {
-    const wb = XLSX.read(fs.readFileSync(file));
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json<RawRow>(sheet, { defval: '' });
-    const headers = rows.length ? Object.keys(rows[0]) : [];
-    return { headers, rows };
-  }
-  const buf = fs.readFileSync(file);
-  let text: string;
-  if (encoding === 'cp1251') {
-    text = new TextDecoder('windows-1251').decode(buf);
-  } else {
-    text = buf.toString('utf-8');
-  }
-  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1); // BOM
-  const firstLine = text.slice(0, text.indexOf('\n'));
-  const delimiter = detectDelimiter(firstLine);
-  const rows = parse(text, {
-    columns: true,
-    delimiter,
-    skip_empty_lines: true,
-    relax_quotes: true,
-    relax_column_count: true,
-    trim: true,
-  }) as RawRow[];
-  const headers = rows.length ? Object.keys(rows[0]) : [];
-  console.log(`Разделитель: «${delimiter === '\t' ? 'таб' : delimiter}»`);
-  return { headers, rows };
-}
 
 function main() {
   const fileArg = arg('file');
   const limit = arg('limit') ? Number(arg('limit')) : undefined;
   const mode = (arg('mode') ?? 'auto') as 'auto' | 'full' | 'enrich';
-  const encoding = arg('encoding') ?? 'utf-8';
+  const encoding = arg('encoding') ?? 'auto';
   const dry = hasFlag('dry');
 
   const rawDir = path.join(ROOT, 'data', 'raw');

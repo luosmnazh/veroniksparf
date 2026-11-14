@@ -1,4 +1,4 @@
-import { RU_TO_EN } from './notes-ru';
+import { NOTES_RU, RU_TO_EN } from './notes-ru';
 
 /**
  * Синонимы и варианты написания нот → каноническое имя.
@@ -191,6 +191,67 @@ export const NOTE_SYNONYMS: Record<string, string> = {
   'musk ambrette': 'ambrette',
   'ambrette seeds': 'ambrette',
   'ambrette seed': 'ambrette',
+  // варианты и опечатки из датасета Fragrantica
+  woodsy: 'woody notes',
+  'woodsy notes': 'woody notes',
+  'precious woods': 'woody notes',
+  'exotic woods': 'woody notes',
+  spices: 'spicy notes',
+  passionfruit: 'passion fruit',
+  'palisander rosewood': 'rosewood',
+  watery: 'sea notes',
+  'pink grapefruit': 'grapefruit',
+  sandalowood: 'sandalwood',
+  myrhh: 'myrrh',
+  'french labdanum': 'labdanum',
+  'balsam fir': 'fir resin',
+  sweet: 'sugar',
+  'red fruits': 'red berries',
+  vetyver: 'vetiver',
+  'teak wood': 'teak',
+  vanila: 'vanilla',
+  'sicilian bergamot': 'bergamot',
+  'indonesian patchouli leaf': 'patchouli',
+  'patchouli leaf': 'patchouli',
+  'white peach': 'peach',
+  'elemi resin': 'elemi',
+  fruits: 'fruity notes',
+  'white rose': 'rose',
+  'white cedar extract': 'cedar',
+  'vanilla orchid': 'vanilla',
+  hiacynth: 'hyacinth',
+  'italian mandarin': 'mandarin',
+  'cacao pod': 'cacao',
+  flowers: 'floral notes',
+  'big strawberry': 'strawberry',
+  pelargonium: 'geranium',
+  'jasmine tea': 'tea',
+  'madagascar vanilla absolute': 'vanilla',
+  'vanilla bean': 'vanilla',
+  'virginia cedarwood': 'cedar',
+  'oak moss absolute': 'oakmoss',
+  'siam benzoin': 'benzoin',
+  'laotian benzoin': 'benzoin',
+  'blonde woods': 'white woods',
+  'blond woods': 'white woods',
+  'light woods': 'white woods',
+  'sea water': 'sea notes',
+  'mandarin leaf': 'petitgrain',
+  'orange leaf': 'petitgrain',
+  'lemon leaf': 'petitgrain',
+  'rose de mai': 'rose',
+  'white wood': 'white woods',
+  resin: 'resins',
+  'lime (linden) blossom': 'linden blossom',
+  grapes: 'grape',
+  'iris flower': 'iris',
+  'rose water': 'rose',
+  civetta: 'civet',
+  rhuburb: 'rhubarb',
+  'coconut nectar': 'coconut',
+  'carambola (star fruit)': 'carambola',
+  'mastic or lentisque': 'mastic',
+  'wild berries': 'red berries',
 };
 
 /**
@@ -210,6 +271,30 @@ export function normalizeNote(raw: string): string {
   s = s.trim();
   if (RU_TO_EN[s]) s = RU_TO_EN[s];
   if (NOTE_SYNONYMS[s]) s = NOTE_SYNONYMS[s];
+  if (!NOTES_RU[s]) s = stripQualifiers(s);
+  return s;
+}
+
+/** Происхождение и форма сырья, которые не меняют сути ноты. */
+const ORIGIN_RE =
+  /^(indian|cambodian|laotian|thai|malaysian|vietnamese|moroccan|tunisian|egyptian|turkish|bulgarian|damask|sicilian|calabrian|italian|guatemalan|brazilian|madagascar|madagascan|bourbon|haitian|javanese|indonesian|mysore|australian|virginian|virginia|atlas|texas|french|spanish|tahitian|mexican|chinese|japanese|sri lankan|ceylon|persian|siberian|canadian|african|arabian|omani|somalian|grasse|may|wild|fresh|black|white|red|pink|green|crystal|dark|sweet|bitter|smoky|golden)\s+(.+)$/;
+const FORM_RE = /^(.+?)\s+(absolute|oil|essential oil|extract|essence|accord|resinoid|co2|tincture|husk|pod|flower|blossom water|leaves|leaf absolute)$/;
+const TINCTURE_RE = /^tincture of (.+)$/;
+
+function stripQualifiers(s: string): string {
+  const resolve = (x: string): string | null => {
+    const y = NOTE_SYNONYMS[x] ?? x;
+    return NOTES_RU[y] ? y : null;
+  };
+  let m = s.match(TINCTURE_RE);
+  if (m && resolve(m[1])) return resolve(m[1])!;
+  m = s.match(FORM_RE);
+  if (m && resolve(m[1])) return resolve(m[1])!;
+  m = s.match(ORIGIN_RE);
+  if (m) {
+    const rest = resolve(m[2]) ?? stripQualifiers(m[2]);
+    if (NOTES_RU[rest]) return rest;
+  }
   return s;
 }
 

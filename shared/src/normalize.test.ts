@@ -47,3 +47,25 @@ describe('noteRu', () => {
     expect(noteRu('mystery substance')).toBe('mystery substance');
   });
 });
+
+describe('нормализация нот из датасета', () => {
+  it('сводит происхождение и форму сырья к базовой ноте', () => {
+    expect(normalizeNote('Indian Oud')).toBe('oud');
+    expect(normalizeNote('Moroccan Rose')).toBe('rose');
+    expect(normalizeNote('Sicilian Mandarin')).toBe('mandarin');
+    expect(normalizeNote('vanilla absolute')).toBe('vanilla');
+    expect(normalizeNote('tincture of rose')).toBe('rose');
+    expect(normalizeNote('Black Vanilla Husk')).toBe('vanilla');
+  });
+  it('исправляет опечатки датасета', () => {
+    expect(normalizeNote('sandalowood')).toBe('sandalwood');
+    expect(normalizeNote('vanila')).toBe('vanilla');
+    expect(normalizeNote('Agarwood (Oud)')).toBe('oud');
+  });
+  it('не портит составные ноты, у которых есть свой перевод', () => {
+    expect(normalizeNote('orange blossom')).toBe('orange blossom');
+    expect(normalizeNote('pink pepper')).toBe('pink pepper');
+    expect(normalizeNote('green tea')).toBe('green tea');
+    expect(normalizeNote('black currant')).toBe('black currant');
+  });
+});

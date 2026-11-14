@@ -167,7 +167,7 @@ export function createBot(deps: BotDeps): Bot {
     if (!query) return ctx.reply('Назовите аромат: /similar Aventus');
     const target = findPerfumeByName(query, catalog.all());
     if (!target) return ctx.reply(`«${query}» в архиве не значится. Проверьте написание.`);
-    const res = findSimilar(target, catalog.all(), { limit: 5, noteIndex: catalog.index() });
+    const res = findSimilar(target, catalog.all(), { limit: 5, noteIndex: catalog.index(), byId: catalog.byId() });
     if (!res.length) return ctx.reply(`Для ${target.name} достойной компании в архиве пока нет.`);
     const lines = [`Похожие на <b>${esc(target.name)}</b> (${esc(target.brand)}):`, ''];
     res.forEach((r, i) => {
