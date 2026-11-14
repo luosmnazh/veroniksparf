@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard, webhookCallback, type Context } from 'grammy';
+import { Bot, GrammyError, HttpError, InlineKeyboard, webhookCallback, type Context } from 'grammy';
 import type { UserFromGetMe } from 'grammy/types';
 import type { FastifyInstance } from 'fastify';
 import crypto from 'node:crypto';
@@ -94,7 +94,11 @@ function advisorText(r: AdvisorReply): string {
 
 export function createBot(deps: BotDeps): Bot {
   const { catalog, advisor, allowed, webappUrl, log } = deps;
-  const bot = new Bot(deps.token, deps.botInfo ? { botInfo: deps.botInfo } : undefined);
+  const bot = new Bot(deps.token, {
+    ...(deps.botInfo ? { botInfo: deps.botInfo } : {}),
+    // не ждать ответа Telegram бесконечно (по умолчанию 500 с); long polling держит 30 с
+    client: { timeoutSeconds: 60 },
+  });
   const limiter = new RateLimiter(20, 60_000);
   /** Незавершённые уточнения: chatId → контекст и варианты. */
   const pending = new Map<number, { context: string; options: ClarifyOption[] }>();
@@ -222,7 +226,7 @@ export function createBot(deps: BotDeps): Bot {
     await answerAdvisor(ctx, ctx.message.text);
   });
 
-  bot.catch((err) => log(`Ошибка бота: ${err.error instanceof Error ? err.error.message : String(err.error)}`));
+  bot.catch((err) => log(`Ошибка бота: ${describeBotError(err.error)}`));
   return bot;
 }
 
@@ -245,6 +249,58 @@ export async function configureBot(bot: Bot, webappUrl: string | null, log: (m: 
   }
 }
 
+/** Скрывает токен бота, если он попал в текст ошибки (например, в URL запроса). */
+export function redactToken(text: string): string {
+  return text.replace(/\d{5,}:[A-Za-z0-9_-]{20,}/g, '<токен>');
+}
+
+/** Понятное описание ошибки Bot API без утечки токена. */
+export function describeBotError(e: unknown): string {
+  if (e instanceof GrammyError) {
+    if (e.error_code === 401) return 'Telegram не принял токен (401 Unauthorized) — проверьте BOT_TOKEN';
+    return `Telegram ответил ошибкой ${e.error_code}: ${e.description}`;
+  }
+  if (e instanceof HttpError) {
+    const inner = e.error instanceof Error ? `${e.error.name}: ${e.error.message}` : String(e.error);
+    return redactToken(`нет связи с Telegram (${inner})`);
+  }
+  return redactToken(e instanceof Error ? e.message : String(e));
+}
+
+/** Проверка формата токена. Возвращает описание проблемы или null. */
+export function checkTokenFormat(token: string): string | null {
+  if (/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(token)) return null;
+  const hints: string[] = [];
+  if (/\s/.test(token)) hints.push('внутри есть пробел или перенос строки');
+  if (/[^\x21-\x7e]/.test(token)) hints.push('есть невидимые или нелатинские символы');
+  if (!token.includes(':')) hints.push('нет двоеточия');
+  hints.push(`длина ${token.length} символов, ожидается около 46`);
+  return `BOT_TOKEN выглядит неправильно: ${hints.join('; ')}`;
+}
+
+/**
+ * Повторяет вызов при сетевых сбоях (бесплатный хостинг иногда стартует
+ * без сети). Ошибки Telegram вроде неверного токена не повторяются.
+ */
+async function withRetry<T>(
+  what: string,
+  fn: () => Promise<T>,
+  log: (m: string) => void,
+  delaysSec = [3, 5, 10, 20, 40, 60, 120, 300],
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      const retriable = e instanceof HttpError || (e instanceof GrammyError && e.error_code >= 500);
+      const delay = delaysSec[Math.min(attempt, delaysSec.length - 1)];
+      if (!retriable) throw e;
+      log(`${what}: ${describeBotError(e)}. Повтор через ${delay} с`);
+      await new Promise((r) => setTimeout(r, delay * 1000));
+    }
+  }
+}
+
 /** Запуск: webhook (хостинг) или long polling (свой компьютер). */
 export async function startBot(
   bot: Bot,
@@ -252,6 +308,7 @@ export async function startBot(
   webappUrl: string | null,
   mode: 'webhook' | 'polling',
   log: (m: string) => void,
+  retryDelaysSec?: number[],
 ): Promise<void> {
   const useWebhook = mode === 'webhook' && webappUrl?.startsWith('https://');
   const secret = crypto.createHash('sha256').update(bot.token).digest('hex').slice(0, 32);
@@ -259,14 +316,31 @@ export async function startBot(
   // маршрут регистрируется синхронно — до app.listen
   if (useWebhook) app.post(path, webhookCallback(bot, 'fastify', { secretToken: secret }));
 
-  await configureBot(bot, webappUrl, log);
+  const formatProblem = checkTokenFormat(bot.token);
+  if (formatProblem) log(formatProblem);
+
+  await withRetry('Связь с Telegram', () => bot.init(), log, retryDelaysSec);
+  const name = `@${bot.botInfo.username}`;
+  log(`Бот ${name} на связи`);
+
+  try {
+    await withRetry('Настройка меню', () => configureBot(bot, webappUrl, log), log, retryDelaysSec ?? [3, 10, 30]);
+  } catch (e) {
+    log(`Не удалось настроить команды и кнопку меню: ${describeBotError(e)}`);
+  }
+
   if (useWebhook) {
-    await bot.api.setWebhook(`${webappUrl!.replace(/\/$/, '')}${path}`, { secret_token: secret });
-    log('Бот: режим webhook');
+    await withRetry(
+      'Подключение webhook',
+      () => bot.api.setWebhook(`${webappUrl!.replace(/\/$/, '')}${path}`, { secret_token: secret }),
+      log,
+      retryDelaysSec,
+    );
+    log(`Бот ${name}: режим webhook`);
   } else {
-    await bot.api.deleteWebhook();
-    bot.start({ onStart: (me) => log(`Бот @${me.username}: режим long polling`) }).catch((e) => {
-      log(`Бот остановлен: ${e instanceof Error ? e.message : e}`);
+    await withRetry('Отключение webhook', () => bot.api.deleteWebhook(), log);
+    bot.start({ onStart: () => log(`Бот ${name}: режим long polling`) }).catch((e) => {
+      log(`Бот остановлен: ${describeBotError(e)}`);
     });
   }
 }

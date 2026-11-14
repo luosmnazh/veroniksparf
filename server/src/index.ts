@@ -8,7 +8,7 @@ import { QUICK_PROMPTS, findSimilar, noteRu } from '@veroniks/shared';
 import { autocomplete, getMeta, getPerfume, listPerfumes, openDb, seedIfEmpty } from './db';
 import { Catalog } from './catalog';
 import { createAdvisor } from './advisor';
-import { createBot, startBot } from './bot';
+import { createBot, describeBotError, startBot } from './bot';
 import { RateLimiter } from './rate-limit';
 import {
   isAllowed,
@@ -201,7 +201,7 @@ if (fs.existsSync(webDist)) {
 if (BOT_TOKEN) {
   const bot = createBot({ token: BOT_TOKEN, webappUrl: WEBAPP_URL, allowed: ALLOWED, catalog, advisor, log });
   startBot(bot, app, WEBAPP_URL, BOT_MODE, log).catch((e) =>
-    app.log.error(`Бот не запустился: ${e instanceof Error ? e.message : e}`),
+    app.log.error(`Бот не запустился: ${describeBotError(e)}`),
   );
 } else {
   log('BOT_TOKEN не задан — бот выключен, работает только веб-приложение');

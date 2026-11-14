@@ -120,3 +120,38 @@ describe('бот @veroniksparfbot', () => {
     expect(t).toMatch(/2\. /);
   });
 });
+
+describe('запуск бота при сбоях сети', () => {
+  it('повторяет попытки и подключает webhook, когда сеть появилась', async () => {
+    const { startBot } = await import('./bot');
+    const { HttpError } = await import('grammy');
+    const Fastify = (await import('fastify')).default;
+    const bot = createBot({
+      token: '1:TEST',
+      webappUrl: 'https://club.example.com',
+      allowed: new Set(),
+      catalog,
+      advisor: new RuleAdvisor(),
+      log: () => {},
+    });
+    let failures = 2;
+    const calls: string[] = [];
+    bot.api.config.use(async (_prev, method) => {
+      calls.push(method);
+      if (method === 'setWebhook' && failures > 0) {
+        failures--;
+        throw new HttpError(`Network request for '${method}' failed!`, new Error('ECONNRESET'));
+      }
+      if (method === 'getMe') return { ok: true, result: botInfo } as never;
+      return { ok: true, result: true } as never;
+    });
+    const logs: string[] = [];
+    const app = Fastify();
+    await startBot(bot, app, 'https://club.example.com', 'webhook', (m) => logs.push(m), [0]);
+    expect(logs.filter((l) => l.includes('Повтор'))).toHaveLength(2);
+    expect(logs.some((l) => l.includes('режим webhook'))).toBe(true);
+    expect(calls.filter((c) => c === 'setWebhook')).toHaveLength(3);
+    expect(calls).toContain('setChatMenuButton');
+    await app.close();
+  });
+});

@@ -96,3 +96,32 @@ describe('findPerfumeByName', () => {
     expect(findPerfumeByName('неизвестное нечто', SEED_PERFUMES)).toBeNull();
   });
 });
+
+describe('диагностика запуска бота', async () => {
+  const { checkTokenFormat, describeBotError, redactToken } = await import('./bot');
+  const { HttpError, GrammyError } = await import('grammy');
+  const good = '1234567890:AAH2abcdefghijklmnopqrstuvwxyz012345';
+
+  it('корректный токен проходит проверку формата', () => {
+    expect(checkTokenFormat(good)).toBeNull();
+  });
+
+  it('подсказывает про пробел внутри и обрезанный токен', () => {
+    expect(checkTokenFormat('1234567890:AAH2abc defghijklmnopqrstuvwxyz012345')).toMatch(/пробел/);
+    expect(checkTokenFormat('1234567890:AAH2')).toMatch(/длина/);
+  });
+
+  it('токен никогда не попадает в текст ошибки', () => {
+    expect(redactToken(`request to https://api.telegram.org/bot${good}/getMe failed`)).not.toContain(good);
+    const net = new HttpError('Network request for \'getMe\' failed!', new Error(`fetch https://api.telegram.org/bot${good}/getMe ECONNRESET`));
+    const msg = describeBotError(net);
+    expect(msg).toMatch(/нет связи с Telegram/);
+    expect(msg).toContain('ECONNRESET');
+    expect(msg).not.toContain(good);
+  });
+
+  it('401 объясняется по-человечески', () => {
+    const e = new GrammyError("Call to 'getMe' failed!", { ok: false, error_code: 401, description: 'Unauthorized' }, 'getMe', {});
+    expect(describeBotError(e)).toMatch(/BOT_TOKEN/);
+  });
+});
