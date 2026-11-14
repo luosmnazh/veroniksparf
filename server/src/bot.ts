@@ -381,6 +381,7 @@ export async function startBot(
     );
     botStatus.state = 'работает';
     botStatus.mode = 'webhook';
+    if (botStatus.detail?.startsWith('Связь') || botStatus.detail?.startsWith('Подключение')) botStatus.detail = null;
     log(`Бот ${name}: режим webhook`);
   } else {
     await withRetry('Отключение webhook', () => bot.api.deleteWebhook(), log);
@@ -388,6 +389,7 @@ export async function startBot(
       onStart: () => {
         botStatus.state = 'работает';
         botStatus.mode = 'long polling';
+        if (botStatus.detail?.startsWith('Связь') || botStatus.detail?.startsWith('Отключение')) botStatus.detail = null;
         log(`Бот ${name}: режим long polling`);
       },
     }).catch((e) => {
