@@ -143,6 +143,8 @@ describe('запуск бота при сбоях сети', () => {
         throw new HttpError(`Network request for '${method}' failed!`, new Error('ECONNRESET'));
       }
       if (method === 'getMe') return { ok: true, result: botInfo } as never;
+      if (method === 'getMyShortDescription') return { ok: true, result: { short_description: '' } } as never;
+      if (method === 'getMyDescription') return { ok: true, result: { description: 'уже есть' } } as never;
       return { ok: true, result: true } as never;
     });
     const logs: string[] = [];
@@ -152,6 +154,9 @@ describe('запуск бота при сбоях сети', () => {
     expect(logs.some((l) => l.includes('режим webhook'))).toBe(true);
     expect(calls.filter((c) => c === 'setWebhook')).toHaveLength(3);
     expect(calls).toContain('setChatMenuButton');
+    // пустое «About» заполняется, а существующее описание не трогается
+    expect(calls).toContain('setMyShortDescription');
+    expect(calls).not.toContain('setMyDescription');
     await app.close();
   });
 });

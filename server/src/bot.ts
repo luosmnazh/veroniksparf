@@ -231,7 +231,30 @@ export function createBot(deps: BotDeps): Bot {
 }
 
 /** Настройка команд и кнопки меню (Mini App). */
+/** «About» в профиле бота (до 120 символов). */
+export const BOT_SHORT_DESCRIPTION =
+  'Закрытый парфюмерный клуб: каталог, похожие ароматы и советник с британской выдержкой.';
+
+/** Текст на пустом экране чата до /start (до 512 символов). */
+export const BOT_DESCRIPTION = [
+  'Добрый вечер. Это Veroniks — закрытый парфюмерный клуб.',
+  '',
+  '• Опишите, чего хочется: «тёплое и дымное на зимний вечер» — подберу 3–5 ароматов и объясню выбор.',
+  '• /similar Aventus — похожие ароматы.',
+  '• /perfume Sauvage — пирамида нот и досье.',
+  '',
+  'Вход — только для своих.',
+].join('\n');
+
 export async function configureBot(bot: Bot, webappUrl: string | null, log: (m: string) => void) {
+  // описания заполняем, только если они пустые — правки в @BotFather не затираем
+  const [short, full] = await Promise.all([
+    bot.api.getMyShortDescription(),
+    bot.api.getMyDescription(),
+  ]);
+  if (!short.short_description) await bot.api.setMyShortDescription(BOT_SHORT_DESCRIPTION);
+  if (!full.description) await bot.api.setMyDescription(BOT_DESCRIPTION);
+
   await bot.api.setMyCommands([
     { command: 'start', description: 'Войти в клуб' },
     { command: 'similar', description: 'Похожие ароматы: /similar Aventus' },
