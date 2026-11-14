@@ -94,7 +94,8 @@ app.addHook('onRequest', async (req, reply) => {
 
 // ---------- API ----------
 
-app.get('/api/health', async () => ({ ok: true }));
+// Render проверяет этот адрес каждые несколько секунд — не засоряем лог
+app.get('/api/health', { logLevel: 'silent' }, async () => ({ ok: true }));
 
 app.get('/api/config', async () => ({
   restricted: ALLOWED.size > 0,
