@@ -274,7 +274,9 @@ export async function configureBot(bot: Bot, webappUrl: string | null, log: (m: 
 
 /** Скрывает токен бота, если он попал в текст ошибки (например, в URL запроса). */
 export function redactToken(text: string): string {
-  return text.replace(/\d{5,}:[A-Za-z0-9_-]{20,}/g, '<токен>');
+  return text
+    .replace(/\/bot[^/\s]+/g, '/bot<токен>') // в адресе запроса, в т. ч. с %20 и прочими кодами
+    .replace(/\d{5,}:[A-Za-z0-9_%-]{10,}/g, '<токен>');
 }
 
 /** Понятное описание ошибки Bot API без утечки токена. */
@@ -305,6 +307,15 @@ export function checkTokenFormat(token: string): string | null {
  * Повторяет вызов при сетевых сбоях (бесплатный хостинг иногда стартует
  * без сети). Ошибки Telegram вроде неверного токена не повторяются.
  */
+/** Состояние бота для /api/health — чтобы видеть его без логов хостинга. */
+export const botStatus: {
+  state: 'выключен' | 'подключается' | 'работает' | 'ошибка';
+  detail: string | null;
+  tokenProblem: string | null;
+  username: string | null;
+  mode: string | null;
+} = { state: 'выключен', detail: null, tokenProblem: null, username: null, mode: null };
+
 async function withRetry<T>(
   what: string,
   fn: () => Promise<T>,
@@ -317,7 +328,11 @@ async function withRetry<T>(
     } catch (e) {
       const retriable = e instanceof HttpError || (e instanceof GrammyError && e.error_code >= 500);
       const delay = delaysSec[Math.min(attempt, delaysSec.length - 1)];
-      if (!retriable) throw e;
+      botStatus.detail = `${what}: ${describeBotError(e)}`;
+      if (!retriable) {
+        botStatus.state = 'ошибка';
+        throw e;
+      }
       log(`${what}: ${describeBotError(e)}. Повтор через ${delay} с`);
       await new Promise((r) => setTimeout(r, delay * 1000));
     }
@@ -340,15 +355,20 @@ export async function startBot(
   if (useWebhook) app.post(path, webhookCallback(bot, 'fastify', { secretToken: secret }));
 
   const formatProblem = checkTokenFormat(bot.token);
+  botStatus.state = 'подключается';
+  botStatus.tokenProblem = formatProblem;
   if (formatProblem) log(formatProblem);
 
-  await withRetry('Связь с Telegram', () => bot.init(), log, retryDelaysSec);
+  // свой getMe вместо bot.init(): каждая неудача видна в логе и в /api/health
+  bot.botInfo = await withRetry('Связь с Telegram', () => bot.api.getMe(), log, retryDelaysSec);
   const name = `@${bot.botInfo.username}`;
+  botStatus.username = name;
   log(`Бот ${name} на связи`);
 
   try {
     await withRetry('Настройка меню', () => configureBot(bot, webappUrl, log), log, retryDelaysSec ?? [3, 10, 30]);
   } catch (e) {
+    botStatus.detail = `Меню не настроено: ${describeBotError(e)}`;
     log(`Не удалось настроить команды и кнопку меню: ${describeBotError(e)}`);
   }
 
@@ -359,10 +379,20 @@ export async function startBot(
       log,
       retryDelaysSec,
     );
+    botStatus.state = 'работает';
+    botStatus.mode = 'webhook';
     log(`Бот ${name}: режим webhook`);
   } else {
     await withRetry('Отключение webhook', () => bot.api.deleteWebhook(), log);
-    bot.start({ onStart: () => log(`Бот ${name}: режим long polling`) }).catch((e) => {
+    bot.start({
+      onStart: () => {
+        botStatus.state = 'работает';
+        botStatus.mode = 'long polling';
+        log(`Бот ${name}: режим long polling`);
+      },
+    }).catch((e) => {
+      botStatus.state = 'ошибка';
+      botStatus.detail = describeBotError(e);
       log(`Бот остановлен: ${describeBotError(e)}`);
     });
   }

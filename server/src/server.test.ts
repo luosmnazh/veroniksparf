@@ -120,6 +120,13 @@ describe('диагностика запуска бота', async () => {
     expect(msg).not.toContain(good);
   });
 
+  it('маскирует и «битый» токен с пробелом внутри (%20 в адресе)', () => {
+    const bad = 'request to https://api.telegram.org/bot1234567890:AAHfake%20fakefake/getMe failed';
+    const out = redactToken(bad);
+    expect(out).not.toContain('AAHfake');
+    expect(out).toContain('/bot<токен>/getMe');
+  });
+
   it('401 объясняется по-человечески', () => {
     const e = new GrammyError("Call to 'getMe' failed!", { ok: false, error_code: 401, description: 'Unauthorized' }, 'getMe', {});
     expect(describeBotError(e)).toMatch(/BOT_TOKEN/);

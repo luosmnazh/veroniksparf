@@ -8,7 +8,7 @@ import { QUICK_PROMPTS, findSimilar, noteRu } from '@veroniks/shared';
 import { autocomplete, getMeta, getPerfume, listPerfumes, openDb, seedIfEmpty } from './db';
 import { Catalog } from './catalog';
 import { createAdvisor } from './advisor';
-import { createBot, describeBotError, startBot } from './bot';
+import { botStatus, createBot, describeBotError, startBot } from './bot';
 import { RateLimiter } from './rate-limit';
 import {
   isAllowed,
@@ -95,7 +95,11 @@ app.addHook('onRequest', async (req, reply) => {
 // ---------- API ----------
 
 // Render проверяет этот адрес каждые несколько секунд — не засоряем лог
-app.get('/api/health', { logLevel: 'silent' }, async () => ({ ok: true }));
+app.get('/api/health', { logLevel: 'silent' }, async () => ({
+  ok: true,
+  version: process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? 'local',
+  bot: botStatus,
+}));
 
 app.get('/api/config', async () => ({
   restricted: ALLOWED.size > 0,
